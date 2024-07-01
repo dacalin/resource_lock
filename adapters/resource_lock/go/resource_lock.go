@@ -16,10 +16,6 @@ type GoResourceLock struct {
 	cleanMemMilis int64
 }
 
-func SetMaxLockTime(milis int64) {
-	Instance().cleanMemMilis = milis
-}
-
 func Instance() *GoResourceLock {
 	once.Do(func() {
 		// Clean memory every 1 seconds by default
@@ -30,6 +26,10 @@ func Instance() *GoResourceLock {
 	})
 
 	return instance
+}
+
+func (self *GoResourceLock) SetMaxLockTime(milis int64) {
+	Instance().cleanMemMilis = milis
 }
 
 func (self *GoResourceLock) Lock(id string) {
