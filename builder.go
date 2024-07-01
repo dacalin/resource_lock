@@ -8,6 +8,8 @@ import (
 
 type LockType int
 
+var instance _i_resource_lock.IResourceLock
+
 const (
 	Local LockType = iota
 	Redis
@@ -28,6 +30,14 @@ func New(lockType LockType) *ResourceLockBuilder {
 	}
 }
 
+func Instance() _i_resource_lock.IResourceLock {
+	if instance == nil {
+		panic("ResourceLock is not set. Call Build() first.")
+	}
+
+	return instance
+}
+
 func (b *ResourceLockBuilder) WithRedisConfig(host, port string, poolSize int) *ResourceLockBuilder {
 	b.redisHost = host
 	b.redisPort = port
@@ -35,7 +45,7 @@ func (b *ResourceLockBuilder) WithRedisConfig(host, port string, poolSize int) *
 	return b
 }
 
-func (b *ResourceLockBuilder) WithCleanMemInterval(milis int64) *ResourceLockBuilder {
+func (b *ResourceLockBuilder) WithMaxLockTime(milis int64) *ResourceLockBuilder {
 	b.cleanMemMilis = milis
 	return b
 }
@@ -43,13 +53,17 @@ func (b *ResourceLockBuilder) WithCleanMemInterval(milis int64) *ResourceLockBui
 func (b *ResourceLockBuilder) Build() _i_resource_lock.IResourceLock {
 	switch b.lockType {
 	case Local:
-		instance := _rl_go.Instance()
-		instance.SetMaxLockTime(b.cleanMemMilis)
-		return _rl_go.Instance()
-	case Redis:
-		instance := _rl_redis.New(b.redisHost, b.redisPort, b.redisPoolSize)
-		instance.SetMaxLockTime(b.cleanMemMilis)
+		itc := _rl_go.Instance()
+		itc.SetMaxLockTime(b.cleanMemMilis)
+		instance = itc
 		return instance
+
+	case Redis:
+		itc := _rl_redis.New(b.redisHost, b.redisPort, b.redisPoolSize)
+		itc.SetMaxLockTime(b.cleanMemMilis)
+		instance = itc
+		return instance
+
 	default:
 		panic("Invalid lock type")
 	}

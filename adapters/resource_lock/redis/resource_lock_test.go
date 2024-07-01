@@ -2,6 +2,7 @@ package _rl_redis
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -146,5 +147,52 @@ func TestSetMaxLockTime(t *testing.T) {
 
 	if lock.cleanMemMilis != 500 {
 		t.Errorf("Expected cleanMemMilis to be 500, got %d", lock.cleanMemMilis)
+	}
+}
+
+func TestRedisResourceLockBlock(t *testing.T) {
+	host := "localhost"
+	port := "6379"
+	maxPoolSize := 10
+
+	lock := New(host, port, maxPoolSize)
+
+	// Test parameters
+	resourceID := "test_resource"
+	numGoroutines := 5
+	waitTime := 200 * time.Millisecond
+	wg := sync.WaitGroup{}
+	wg.Add(numGoroutines)
+
+	// Channel to collect the order of lock acquisition
+	lockOrder := make(chan int, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			fmt.Printf("Goroutine %d trying to lock...\n", id)
+			lock.Lock(resourceID)
+			fmt.Printf("Goroutine %d acquired the lock!\n", id)
+			lockOrder <- id
+			time.Sleep(waitTime) // Simulate some work with the resource
+			lock.Unlock(resourceID)
+			fmt.Printf("Goroutine %d released the lock!\n", id)
+		}(i)
+	}
+
+	wg.Wait()
+	close(lockOrder)
+
+	// Check the order of lock acquisition
+	order := []int{}
+	for id := range lockOrder {
+		order = append(order, id)
+	}
+
+	// Ensure the order is as expected
+	for i := 0; i < numGoroutines; i++ {
+		if order[i] != i {
+			t.Errorf("Expected goroutine %d to acquire the lock at position %d, but got position %d", i, i, order[i])
+		}
 	}
 }
