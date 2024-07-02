@@ -29,8 +29,8 @@ import (
 
 func main() {
     lock := rl.New(rl.Local).
-        WithCleanMemInterval(5000). // Set clean memory interval to 5000 milliseconds
-        Build()
+         WithMaxLockTime(5000). // Set clean memory interval to 5000 milliseconds
+         Build()
 
     resourceID := "exampleResource"
 
@@ -67,7 +67,7 @@ func main() {
 
     lock := rl.New(rl.Redis).
         WithRedisConfig(redisHost, redisPort, redisPoolSize).
-        WithCleanMemInterval(cleanMemMilis).
+        WithMaxLockTime(cleanMemMilis).
         Build()
 
     resourceID := "exampleResource"
