@@ -20,18 +20,16 @@ func Instance() *GoResourceLock {
 	once.Do(func() {
 		// Clean memory every 1 seconds by default
 		instance = &GoResourceLock{
-			cleanMemMilis: 1000,
+			cleanMemMilis: 30000,
 		}
 		go instance.cleanMemLoop()
 	})
 
 	return instance
 }
-
-func (self *GoResourceLock) SetMaxLockTime(milis int64) {
-	Instance().cleanMemMilis = milis
+func (self *GoResourceLock) SetMaxLockTime(ms int64) {
+	Instance().cleanMemMilis = ms
 }
-
 func (self *GoResourceLock) Lock(id string) {
 	value, ok := self.resource.Load(id)
 	if !ok {

@@ -10,7 +10,6 @@ func TestGoResourceLock(t *testing.T) {
 	// Set a custom max lock time for testing
 	// Create a lock instance
 	lock := Instance()
-	lock.SetMaxLockTime(200) // 200 milliseconds
 
 	// Define a resource ID
 	id := "testResource"
@@ -47,7 +46,6 @@ func TestConcurrentLocking(t *testing.T) {
 	// Set a custom max lock time for testing
 	// Create a lock instance
 	lock := Instance()
-	lock.SetMaxLockTime(200) // 200 milliseconds
 
 	// Define resource IDs
 	id1 := "resource1"
@@ -83,7 +81,6 @@ func TestCleanMemLoop(t *testing.T) {
 	// Set a custom max lock time for testing
 	// Create a lock instance
 	lock := Instance()
-	lock.SetMaxLockTime(100) // 200 milliseconds
 
 	// Define a resource ID
 	id := "testResourceLoop"

@@ -8,7 +8,7 @@ import (
 
 func TestBuilder(t *testing.T) {
 	rl := New(Local).
-		WithMaxLockTime(5000). // Set clean memory interval to 5000 milliseconds
+		WithMaxLockTime(30000). // Set clean memory interval to 5000 milliseconds
 		Build()
 
 	resourceID := "exampleResource"
