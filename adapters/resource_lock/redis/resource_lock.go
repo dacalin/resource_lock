@@ -21,14 +21,16 @@ type RedisResourceLock struct {
 	client        *redis.Client
 	cleanMemMilis int64
 	queuePrefix   string
-	lockPrefix    string
 }
 
-func New(host string, port string, maxPoolSize int) *RedisResourceLock {
+func New(host string, port string, user string, password string, DB int, maxPoolSize int, prefix string) *RedisResourceLock {
 	addr := fmt.Sprintf("%s:%s", host, port)
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		PoolSize: maxPoolSize,
+		DB:       DB,
+		Username: user,
+		Password: password,
 	})
 
 	once.Do(func() {
@@ -36,8 +38,7 @@ func New(host string, port string, maxPoolSize int) *RedisResourceLock {
 		instance = &RedisResourceLock{
 			client:        client,
 			cleanMemMilis: 15000,
-			queuePrefix:   "dlq_",
-			lockPrefix:    "dlk_",
+			queuePrefix:   prefix + "_dlq_",
 		}
 		go instance.cleanMemLoop()
 	})

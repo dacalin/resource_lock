@@ -12,7 +12,6 @@ func TestBuilder(t *testing.T) {
 		Build()
 
 	resourceID := "exampleResource"
-
 	rl.Lock(resourceID)
 	fmt.Println("Locked resource with Local Lock")
 

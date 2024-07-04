@@ -20,6 +20,10 @@ type ResourceLockBuilder struct {
 	redisHost     string
 	redisPort     string
 	redisPoolSize int
+	redisUser     string
+	redisPassword string
+	redisDB       int
+	redisPrefix   string
 	cleanMemMilis int64
 }
 
@@ -38,10 +42,14 @@ func Instance() _i_resource_lock.IResourceLock {
 	return instance
 }
 
-func (b *ResourceLockBuilder) WithRedisConfig(host, port string, poolSize int) *ResourceLockBuilder {
+func (b *ResourceLockBuilder) WithRedisConfig(host string, port string, user string, password string, DB int, maxPoolSize int, prefix string) *ResourceLockBuilder {
 	b.redisHost = host
 	b.redisPort = port
-	b.redisPoolSize = poolSize
+	b.redisPoolSize = maxPoolSize
+	b.redisUser = user
+	b.redisPassword = password
+	b.redisDB = DB
+	b.redisPrefix = prefix
 	return b
 }
 
@@ -59,7 +67,7 @@ func (b *ResourceLockBuilder) Build() _i_resource_lock.IResourceLock {
 		return instance
 
 	case Redis:
-		itc := _rl_redis.New(b.redisHost, b.redisPort, b.redisPoolSize)
+		itc := _rl_redis.New(b.redisHost, b.redisPort, b.redisUser, b.redisPassword, b.redisDB, b.redisPoolSize, b.redisPrefix)
 		itc.SetMaxLockTime(b.cleanMemMilis)
 		instance = itc
 		return instance

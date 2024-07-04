@@ -1,6 +1,6 @@
 module github.com/dacalin/resource_lock
 
-go 1.22
+go 1.21
 
 require github.com/redis/go-redis/v9 v9.5.3
 
