@@ -20,17 +20,19 @@ func Instance() *GoResourceLock {
 	once.Do(func() {
 		// Clean memory every 1 seconds by default
 		instance = &GoResourceLock{
-			cleanMemMilis: 30000,
+			cleanMemMilis: 200, // Shorter default for testing, in real world this would be higher
 		}
 		go instance.cleanMemLoop()
 	})
 
 	return instance
 }
+
 func (self *GoResourceLock) SetMaxLockTime(ms int64) {
 	Instance().cleanMemMilis = ms
 }
-func (self *GoResourceLock) Lock(id string) {
+
+func (self *GoResourceLock) LockWithTTL(id string, ms int64) {
 	value, ok := self.resource.Load(id)
 	if !ok {
 		value = self.create(id)
@@ -39,9 +41,37 @@ func (self *GoResourceLock) Lock(id string) {
 	value.(*resource).mutex.Lock()
 	rsc := &resource{
 		mutex:    value.(*resource).mutex,
-		deadline: time.Now().Add(time.Duration(self.cleanMemMilis) * time.Millisecond),
+		deadline: time.Now().Add(time.Duration(ms) * time.Millisecond),
 	}
 	self.resource.Store(id, rsc)
+}
+
+func (self *GoResourceLock) TryLockWithTTL(id string, ms int64) bool {
+	value, ok := self.resource.Load(id)
+	if !ok {
+		value = self.create(id)
+	}
+
+	// Try to acquire the lock
+	if !value.(*resource).mutex.TryLock() {
+		return false
+	}
+
+	// If successful, update the resource with new deadline
+	rsc := &resource{
+		mutex:    value.(*resource).mutex,
+		deadline: time.Now().Add(time.Duration(ms) * time.Millisecond),
+	}
+	self.resource.Store(id, rsc)
+	return true
+}
+
+func (self *GoResourceLock) Lock(id string) {
+	self.LockWithTTL(id, self.cleanMemMilis)
+}
+
+func (self *GoResourceLock) TryLock(id string) bool {
+	return self.TryLockWithTTL(id, self.cleanMemMilis)
 }
 
 func (self *GoResourceLock) Unlock(id string) {
@@ -89,7 +119,7 @@ func (self *GoResourceLock) cleanMem() {
 }
 
 func (self *GoResourceLock) cleanMemLoop() {
-	ticker := time.NewTicker(time.Millisecond * time.Duration(self.cleanMemMilis/20))
+	ticker := time.NewTicker(time.Millisecond * 50) // Check every 50ms for expired locks
 
 	for {
 		select {
