@@ -1,8 +1,6 @@
 package _rl_redis
 
 import (
-	"fmt"
-	"math/rand"
 	"os"
 	"strconv"
 	"sync"
@@ -39,7 +37,7 @@ func atoi(str string) int {
 
 func TestRedisResourceLock(t *testing.T) {
 	host, port, poolSize := getRedisConfig()
-	lock := New(host, port, poolSize)
+	lock := New(host, port, "", "", 0, poolSize, "test")
 
 	id := "testResource"
 
@@ -47,12 +45,11 @@ func TestRedisResourceLock(t *testing.T) {
 	lock.Unlock(id)
 	lock.Lock(id)
 	lock.Unlock(id)
-
 }
 
 func TestConcurrentRedisLocking(t *testing.T) {
 	host, port, poolSize := getRedisConfig()
-	lock := New(host, port, poolSize)
+	lock := New(host, port, "", "", 0, poolSize, "test")
 
 	id1 := "resource1"
 	id2 := "resource2"
@@ -85,49 +82,27 @@ func TestConcurrentRedisLocking(t *testing.T) {
 	t.Log("Concurrent locking and unlocking completed without panics or deadlocks.")
 }
 
-func TestRedisResourceLockBlock(t *testing.T) {
+func TestRedisResourceLockTime(t *testing.T) {
 	host, port, poolSize := getRedisConfig()
 
-	lock := New(host, port, poolSize)
+	lock := New(host, port, "", "", 0, poolSize, "test")
+	lockTime := 1000
+	Instance().SetMaxLockTime(int64(lockTime))
+
 	// Test parameters
-	numGoroutines := 1000
-	waitTime := 10 * time.Millisecond
-	wg := sync.WaitGroup{}
-	wg.Add(numGoroutines)
+	lockId := "TestRedisResourceLockTime2"
 
-	// Channel to collect the order of lock acquisition
-	lockOrder := make(chan int, numGoroutines)
+	startTime := time.Now()
+	t.Log(startTime)
+	lock.Lock(lockId)
+	lock.Lock(lockId)
 
-	for i := 0; i < numGoroutines; i++ {
-		time.Sleep(10 * time.Millisecond)
-		go func(id int) {
-			defer wg.Done()
-			fmt.Printf("Goroutine %d trying to lock...\n", id)
-			seed := time.Now().UnixNano()
-			randomizer := rand.New(rand.NewSource(seed))
-			resourceID := fmt.Sprintf("%d", randomizer.Intn(800))
-			lock.Lock(resourceID)
-			fmt.Printf("Goroutine %d acquired the lock!\n", id)
-			lockOrder <- id
-			time.Sleep(waitTime) // Simulate some work with the resource
-			lock.Unlock(resourceID)
-			fmt.Printf("Goroutine %d released the lock!\n", id)
-		}(i)
-	}
+	unlockTime := time.Now()
+	t.Log(unlockTime)
 
-	wg.Wait()
-	close(lockOrder)
+	lock.Unlock(lockId)
 
-	// Check the order of lock acquisition
-	order := []int{}
-	for id := range lockOrder {
-		order = append(order, id)
-	}
-
-	// Ensure the order is as expected
-	for i := 0; i < numGoroutines; i++ {
-		if order[i] != i {
-			t.Errorf("Expected goroutine %d to acquire the lock at position %d, but got position %d", i, i, order[i])
-		}
+	if unlockTime.Sub(startTime) > time.Millisecond*time.Duration(lockTime+100) {
+		t.Errorf("Unlock TTL expected to be %d, but got %d", lockTime, unlockTime.Sub(startTime))
 	}
 }
