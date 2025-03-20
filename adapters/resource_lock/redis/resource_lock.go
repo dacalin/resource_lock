@@ -7,20 +7,19 @@ import (
 	"fmt"
 	_i_resource_lock "github.com/dacalin/resource_lock/ports/resource_lock"
 	"github.com/redis/go-redis/v9"
-	"strings"
 	"sync"
 	"time"
 )
 
 var once sync.Once
 var instance *RedisResourceLock
-var sleepTime = 10 * time.Millisecond
 
 type RedisResourceLock struct {
 	_i_resource_lock.IResourceLock
-	client        *redis.Client
-	cleanMemMilis int64
-	queuePrefix   string
+	client      *redis.Client
+	TTL         int64
+	queuePrefix string
+	uniqueId    map[string]string
 }
 
 func New(host string, port string, user string, password string, DB int, maxPoolSize int, prefix string) *RedisResourceLock {
@@ -36,11 +35,11 @@ func New(host string, port string, user string, password string, DB int, maxPool
 	once.Do(func() {
 		// Clean memory every 1 second by default
 		instance = &RedisResourceLock{
-			client:        client,
-			cleanMemMilis: 15000,
-			queuePrefix:   prefix + "_dlq_",
+			client:      client,
+			TTL:         15000,
+			queuePrefix: prefix + "_dlq_",
+			uniqueId:    make(map[string]string),
 		}
-		go instance.cleanMemLoop()
 	})
 
 	return instance
@@ -54,9 +53,10 @@ func Instance() *RedisResourceLock {
 	return instance
 }
 
-func (self *RedisResourceLock) SetMaxLockTime(ms int64) {
-	Instance().cleanMemMilis = ms
+func (l *RedisResourceLock) SetMaxLockTime(ms int64) {
+	Instance().TTL = ms
 }
+
 func generateUniqueID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -65,93 +65,54 @@ func generateUniqueID() string {
 	return hex.EncodeToString(b)
 }
 
-func (self *RedisResourceLock) cleanMem() {
+func (l *RedisResourceLock) LockWithTTL(id string, ms int64) {
 	ctx := context.Background()
-
-	pattern := self.queuePrefix + "*"
-	iter := self.client.Scan(ctx, 0, pattern, 0).Iterator()
-	for iter.Next(ctx) {
-		queueKey := iter.Val()
-
-		_, expTime, err := self.getNextQueueItem(ctx, queueKey)
-
-		for err != nil && expTime.Before(time.Now()) {
-
-			self.client.LPop(ctx, queueKey).Result()
-
-			_, expTime, err = self.getNextQueueItem(ctx, queueKey)
-		}
-
-	}
-	if err := iter.Err(); err != nil {
-		fmt.Println("Error iterating keys:", err)
-	}
-
-}
-func (self *RedisResourceLock) cleanMemLoop() {
-
-	for {
-		self.cleanMem()
-		time.Sleep(time.Duration(self.cleanMemMilis) * time.Millisecond)
-	}
-
-}
-
-func (self *RedisResourceLock) Lock(id string) {
-	ctx := context.Background()
-	queueKey := self.queuePrefix + id
+	key := l.queuePrefix + id
 	uniqueId := generateUniqueID()
-	currentTime := time.Now()
-	duration := time.Duration(self.cleanMemMilis) * time.Millisecond
-	expirationTime := currentTime.Add(duration)
-	compositeId := uniqueId + "|" + expirationTime.Format(time.RFC3339Nano)
 
-	// Add the id to the queue
-	self.client.RPush(ctx, queueKey, compositeId)
+	var sleepTime time.Duration
 
 	for {
-		// Check if it's the turn of this id
-		nextCompositeId, _, err := self.getNextQueueItem(ctx, queueKey)
-		if err == redis.Nil {
-			fmt.Println("Error getting next queue item:", queueKey, "e: ", err)
-			break
-		}
-		if err != nil {
-			fmt.Println("Error getting next queue item:", queueKey, "e: ", err)
-			time.Sleep(sleepTime)
-			continue
-		}
+		acquired := l.client.SetNX(ctx, key, uniqueId, time.Millisecond*time.Duration(ms))
 
-		if nextCompositeId == compositeId {
+		if acquired.Val() == true {
+			l.uniqueId[id] = uniqueId
 			return
 		}
 
-		// Wait for a while before retrying
+		sleepTime = time.Millisecond * time.Duration(1)
 		time.Sleep(sleepTime)
 	}
 }
 
-func (self *RedisResourceLock) getNextQueueItem(ctx context.Context, queueKey string) (string, time.Time, error) {
-	firstCompositeID, err := self.client.LIndex(ctx, queueKey, 0).Result()
-	if err == nil {
-		// Split string into uniqueID and expiration time
-		split := strings.Split(firstCompositeID, "|")
-		firstExpirationTime, err := time.Parse(time.RFC3339Nano, split[1])
-		return firstCompositeID, firstExpirationTime, err
+func (l *RedisResourceLock) TryLockWithTTL(id string, ms int64) bool {
+	ctx := context.Background()
+	key := l.queuePrefix + id
+	uniqueId := generateUniqueID()
+
+	acquired := l.client.SetNX(ctx, key, uniqueId, time.Millisecond*time.Duration(ms))
+
+	if acquired.Val() == true {
+		l.uniqueId[id] = uniqueId
+		return true
 	}
-	return "", time.Time{}, err
+
+	return false
 }
 
-func (self *RedisResourceLock) Unlock(id string) {
+func (l *RedisResourceLock) TryLock(id string) bool {
+	l.TryLockWithTTL(id, l.TTL)
+}
+
+func (l *RedisResourceLock) Lock(id string) {
+	l.LockWithTTL(id, l.TTL)
+}
+
+func (l *RedisResourceLock) Unlock(id string) {
 	ctx := context.Background()
-	queueKey := self.queuePrefix + id
+	key := l.queuePrefix + id
 
-	// Remove the first id from the queue
-	_, err := self.client.LPop(ctx, queueKey).Result()
-
-	if err != nil {
-		fmt.Println("Error removing from queue:", err)
-		return
+	if l.client.Get(ctx, key).Val() == l.uniqueId[id] {
+		l.client.Del(ctx, key)
 	}
-
 }
