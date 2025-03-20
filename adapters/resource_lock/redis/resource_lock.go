@@ -19,7 +19,7 @@ type RedisResourceLock struct {
 	client      *redis.Client
 	TTL         int64
 	queuePrefix string
-	uniqueId    map[string]string
+	uniqueId    sync.Map
 }
 
 func New(host string, port string, user string, password string, DB int, maxPoolSize int, prefix string) *RedisResourceLock {
@@ -38,7 +38,6 @@ func New(host string, port string, user string, password string, DB int, maxPool
 			client:      client,
 			TTL:         15000,
 			queuePrefix: prefix + "_dlq_",
-			uniqueId:    make(map[string]string),
 		}
 	})
 
@@ -77,7 +76,7 @@ func (l *RedisResourceLock) LockWithTTL(id string, ms int64) {
 
 		if acquired.Val() == true {
 			fmt.Printf("Acquired lock id %s by %s\n", id, uniqueId)
-			l.uniqueId[id] = uniqueId
+			l.uniqueId.Store(id, uniqueId)
 			return
 		}
 
@@ -94,7 +93,7 @@ func (l *RedisResourceLock) TryLockWithTTL(id string, ms int64) bool {
 	acquired := l.client.SetNX(ctx, key, uniqueId, time.Millisecond*time.Duration(ms))
 
 	if acquired.Val() == true {
-		l.uniqueId[id] = uniqueId
+		l.uniqueId.Store(id, uniqueId)
 		return true
 	}
 
@@ -122,8 +121,10 @@ func (l *RedisResourceLock) Unlock(id string) {
 			return
 		}
 
-		if get.Val() == l.uniqueId[id] {
-			fmt.Printf("Realeased lock id %s by %s\n", id, l.uniqueId[id])
+		storedID, ok := l.uniqueId.Load(id)
+		if ok && get.Val() == storedID.(string) {
+			fmt.Printf("Realeased lock id %s by %s\n", id, storedID.(string))
+			l.uniqueId.Delete(id)
 			l.client.Del(ctx, key)
 			return
 		}
