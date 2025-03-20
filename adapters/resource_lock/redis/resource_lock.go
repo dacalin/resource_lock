@@ -75,7 +75,7 @@ func (l *RedisResourceLock) LockWithTTL(id string, ms int64) {
 		acquired := l.client.SetNX(ctx, key, uniqueId, time.Millisecond*time.Duration(ms))
 
 		if acquired.Val() == true {
-			fmt.Printf("Acquired lock id %s by %s\n", id, uniqueId)
+			//fmt.Printf("Acquired lock id %s by %s\n", id, uniqueId)
 			l.uniqueId.Store(id, uniqueId)
 			return
 		}
@@ -123,7 +123,7 @@ func (l *RedisResourceLock) Unlock(id string) {
 
 		storedID, ok := l.uniqueId.Load(id)
 		if ok && get.Val() == storedID.(string) {
-			fmt.Printf("Realeased lock id %s by %s\n", id, storedID.(string))
+			//fmt.Printf("Realeased lock id %s by %s\n", id, storedID.(string))
 			l.uniqueId.Delete(id)
 			l.client.Del(ctx, key)
 			return
