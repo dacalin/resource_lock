@@ -101,7 +101,7 @@ func (l *RedisResourceLock) TryLockWithTTL(id string, ms int64) bool {
 }
 
 func (l *RedisResourceLock) TryLock(id string) bool {
-	l.TryLockWithTTL(id, l.TTL)
+	return l.TryLockWithTTL(id, l.TTL)
 }
 
 func (l *RedisResourceLock) Lock(id string) {
