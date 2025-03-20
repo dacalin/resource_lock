@@ -51,32 +51,23 @@ func TestConcurrentRedisLocking(t *testing.T) {
 	host, port, poolSize := getRedisConfig()
 	lock := New(host, port, "", "", 0, poolSize, "test")
 
-	id1 := "resource1"
-	id2 := "resource2"
+	id1 := "resource2"
 
 	var wg sync.WaitGroup
+	ngoroutines := 10
 
-	wg.Add(3)
+	for i := 0; i < ngoroutines; i++ {
+		wg.Add(1)
+		time.Sleep(100 * time.Millisecond)
 
-	go func() {
-		defer wg.Done()
-		lock.Lock(id1)
-		time.Sleep(100 * time.Millisecond)
-		lock.Unlock(id1)
-	}()
+		go func(i int) {
+			defer wg.Done()
+			lock.Lock(id1)
+			time.Sleep(200 * time.Millisecond)
+			lock.Unlock(id1)
+		}(i)
+	}
 
-	go func() {
-		defer wg.Done()
-		lock.Lock(id2)
-		time.Sleep(100 * time.Millisecond)
-		lock.Unlock(id2)
-	}()
-	go func() {
-		defer wg.Done()
-		lock.Lock(id2)
-		time.Sleep(100 * time.Millisecond)
-		lock.Unlock(id2)
-	}()
 	wg.Wait()
 
 	t.Log("Concurrent locking and unlocking completed without panics or deadlocks.")
@@ -94,7 +85,7 @@ func TestRedisResourceLockTime(t *testing.T) {
 
 	startTime := time.Now()
 	t.Log(startTime)
-	lock.Lock(lockId)
+	lock.LockWithTTL(lockId, int64(lockTime))
 	lock.Lock(lockId)
 
 	unlockTime := time.Now()
